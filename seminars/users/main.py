@@ -4,7 +4,7 @@ import flask
 from email_validator import validate_email, EmailNotValidError
 from urllib.parse import urlencode, quote
 from functools import wraps
-from seminars.app import app, send_email
+from seminars.app import app, send_email, get_subject
 from lmfdb.logger import make_logger
 from flask import (
     render_template,
@@ -509,7 +509,7 @@ Thanks for using mathseminars.org!
             )
             subject = "Endorsement to create content on mathseminars.org"
             send_email(email, subject, to_send)
-            userdb.make_creator(email, int(current_user.id))
+            userdb.make_creator(get_subject(), email, int(current_user.id))
             endorsing_link = "<p>{target_name} is now able to create content.</p> ".format(
                 target_name=target_name if target_name else email
             )
@@ -542,8 +542,8 @@ def endorse_wtoken(token):
     elif current_user.email.lower() != email.lower():
         flash_error("The link is not valid for this account.")
     else:
-        current_user.endorser = int(endorser)  # must set endorser first
-        current_user.creator = True  # this will update the db
+        userdb.make_creator(get_subject(), current_user.email, int(endorser))
+        flash("Someone endorsed you! You can now create seminars.", "success")
     return redirect(url_for(".info"))
 
 

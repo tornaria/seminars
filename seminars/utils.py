@@ -11,6 +11,7 @@ from lmfdb.utils.search_boxes import SearchBox
 from psycopg2.sql import SQL
 from markupsafe import Markup, escape
 from collections.abc import Iterable
+from collections import defaultdict
 from urllib.parse import urlparse
 from email_validator import validate_email
 
@@ -152,17 +153,20 @@ shortname_re = re.compile("^[A-Za-z0-9_-]+$")
 def allowed_shortname(shortname):
     return bool(shortname_re.match(shortname))
 
-
 # Note the caching: if you add a topic you have to restart the server
 @cached_function
+def _all_topics():
+    topics = defaultdict(list)
+    for rec in db.topics.search():
+        topics[rec["subject"]].append((rec["abbreviation"], rec["name"]))
+    for subj in topics.values():
+        subj.sort(key=lambda x: x[1].lower())
+    return topics
+
 def topics():
-    return sorted(
-        ((rec["abbreviation"], rec["name"]) for rec in db.topics.search({}, ["abbreviation", "name"])),
-        key=lambda x: x[1].lower(),
-    )
+    from seminars.app import get_subject
+    return _all_topics()[get_subject()]
 
-
-@cached_function
 def topic_dict():
     return dict(topics())
 
@@ -183,10 +187,14 @@ def clean_topics(inp):
     return inp
 
 
-def count_distinct(table, counter, query={}, include_deleted=False):
+def count_distinct(table, counter, query={}, include_deleted=False, any_subject=False):
     query = dict(query)
     if not include_deleted:
         query["deleted"] = {"$or": [False, {"$exists": False}]}
+    if not any_subject:
+        from seminars.app import get_subject
+        # None included as a temporary safety measure
+        query["subject"] = {"$or": [get_subject(), {"$exists": False}]}
     cols = SQL(", ").join(map(IdentifierWrapper, table.search_cols))
     tbl = IdentifierWrapper(table.search_table)
     qstr, values = table._build_query(query, sort=[])
@@ -195,11 +203,15 @@ def count_distinct(table, counter, query={}, include_deleted=False):
     return int(cur.fetchone()[0])
 
 
-def max_distinct(table, maxer, col, constraint={}, include_deleted=False):
+def max_distinct(table, maxer, col, constraint={}, include_deleted=False, any_subject=False):
     # Note that this will return None for the max of an empty set
     constraint = dict(constraint)
     if not include_deleted:
         constraint["deleted"] = {"$or": [False, {"$exists": False}]}
+    if not any_subject:
+        from seminars.app import get_subject
+        # None included as a temporary safety measure
+        constraint["subject"] = {"$or": [get_subject(), {"$exists": False}]}
     cols = SQL(", ").join(map(IdentifierWrapper, table.search_cols))
     tbl = IdentifierWrapper(table.search_table)
     qstr, values = table._build_query(constraint, sort=[])
@@ -220,6 +232,7 @@ def search_distinct(
     sort=None,
     info=None,
     include_deleted=False,
+    any_subject=False,
 ):
     """
     Replacement for db.*.search to account for versioning, return Web* objects.
@@ -238,6 +251,10 @@ def search_distinct(
     query = dict(query)
     if not include_deleted:
         query["deleted"] = {"$or": [False, {"$exists": False}]}
+    if not any_subject:
+        from seminars.app import get_subject
+        # None included as a temporary safety measure
+        query["subject"] = {"$or": [get_subject(), {"$exists": False}]}
     all_cols = SQL(", ").join(map(IdentifierWrapper, ["id"] + table.search_cols))
     search_cols, extra_cols = table._parse_projection(projection)
     cols = SQL(", ").join(map(IdentifierWrapper, search_cols + extra_cols))
@@ -277,10 +294,14 @@ def search_distinct(
     return list(results)
 
 
-def lucky_distinct(table, selecter, construct, query={}, projection=2, offset=0, sort=[], include_deleted=False):
+def lucky_distinct(table, selecter, construct, query={}, projection=2, offset=0, sort=[], include_deleted=False, any_subject=False):
     query = dict(query)
     if not include_deleted:
         query["deleted"] = {"$or": [False, {"$exists": False}]}
+    if not any_subject:
+        from seminars.app import get_subject
+        # None included as a temporary safety measure
+        query["subject"] = {"$or": [get_subject(), {"$exists": False}]}
     all_cols = SQL(", ").join(map(IdentifierWrapper, ["id"] + table.search_cols))
     search_cols, extra_cols = table._parse_projection(projection)
     cols = SQL(", ").join(map(IdentifierWrapper, search_cols + extra_cols))

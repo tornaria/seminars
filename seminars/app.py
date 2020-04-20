@@ -40,6 +40,7 @@ mail_settings = {
 }
 
 app.config.update(mail_settings)
+#app.config['REMEMBER_COOKIE_DOMAIN'] = 
 mail = Mail(app)
 
 ############################
@@ -63,6 +64,17 @@ def set_running():
 def is_running():
     return app.is_running
 
+def get_subject():
+    urlparts = urlparse(request.url)
+    pieces = urlparts.netloc.split(".")
+    if len(pieces) >= 3:
+        subject = pieces[-3]
+        # Check that it's a valid subject by making sure it's in the topic list
+        from seminars.utils import _all_topics
+        if subject in _all_topics():
+            return subject
+    # For now, we default to math.  Eventually we probably want to redirect to some global homepage
+    return "math"
 
 ############################
 # Global app configuration #
@@ -128,6 +140,7 @@ def ctx_proc_userdata():
     data["seminars_header"] = seminars_header
     data["languages_dict"] = languages_dict()
     data["static_knowl"] = static_knowl
+    data["subject"] = get_subject()
 
     return data
 

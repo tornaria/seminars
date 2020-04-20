@@ -20,6 +20,8 @@ console.log('Form is unchanged!');
 {%- endmacro %}
 
 {% block body -%}
+{# pass the subject to javascript #}
+<div id="subjectcode" data-subject="{{subject}}" style="display: none;"></div>
 <div id="header">
   <header class="inner">
     <div id="logo">

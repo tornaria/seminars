@@ -85,7 +85,17 @@ function setLanguageLinks() {
 }
 function setLinks() {
     setLanguageLinks();
-    var cur_topics = getCookie("topics");
+    var subject = $("#subjectcode").data("subject");
+    console.log("subject", subject);
+    var cur_topics = getCookie(subject + "_topics");
+    // Port from the pre-subject world where everything was math
+    if (cur_topics == null && subject == "math") {
+        cur_topics = getCookie("topics");
+        if (cur_topics != null) {
+            setCookie("math_topics", cur_topics);
+            eraseCookie("topics");
+        }
+    }
     $(".talk").addClass("topic-filtered");
     if (cur_topics == null) {
         setCookie("topics", "");

@@ -3,6 +3,7 @@ from flask import render_template, request, redirect, url_for, flash
 from flask_login import current_user
 from seminars.users.main import email_confirmed_required
 from seminars import db
+from seminars.app import get_subject
 from seminars.create import create
 from seminars.utils import (
     timezones,
@@ -55,7 +56,7 @@ def index():
         role_key = {"organizer": 0, "curator": 1, "creator": 3}
         return (role_key[elt[1]], elt[0].name)
 
-    for rec in db.seminar_organizers.search({"email": ilike_query(current_user.email)}, ["seminar_id", "curator"]):
+    for rec in db.seminar_organizers.search({"email": ilike_query(current_user.email), "subject": get_subject()}, ["seminar_id", "curator"]):
         semid = rec["seminar_id"]
         role = "curator" if rec["curator"] else "organizer"
         seminar = WebSeminar(semid)
@@ -346,6 +347,7 @@ def save_seminar():
             "shortname": shortname,
             "display": current_user.is_creator,
             "owner": current_user.email,
+            "subject": get_subject(),
         }
     else:
         data = {
@@ -503,14 +505,15 @@ def save_institution():
             val = raw_data.get(col, "")
             data[col] = None # make sure col is present even if process_user_input fails
             data[col] = process_user_input(val, col, typ, tz)
-            if col == "admin":                
+            if col == "admin":
                 userdata = db.users.lookup(data[col])
+                print("userdata", userdata)
                 if userdata is None:
                     if not data[col]:
                         errmsgs.append("You must specify the email address of the maintainer.")
                     else:
                         errmsgs.append(format_errmsg("user %s does not have an account on this site", data[col]))
-                elif not userdata["creator"]:
+                elif get_subject() not in userdata["endorsed_subject"]:
                     errmsgs.append(format_errmsg("user %s has not been endorsed", data[col]))
         except Exception as err: # should only be ValueError's but let's be cautious
             errmsgs.append(format_errmsg("unable to process input %s for %s: {0}".format(err), val, col))
@@ -608,6 +611,7 @@ def save_talk():
         if curmax is None:
             curmax = 0
         data["seminar_ctr"] = curmax + 1
+        data["subject"] = get_subject()
     else:
         data["seminar_ctr"] = talk.seminar_ctr
     default_tz = talk.seminar.timezone

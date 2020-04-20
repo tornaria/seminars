@@ -9,6 +9,7 @@ from seminars.tokens import generate_token
 from seminars.seminar import WebSeminar, seminars_search, next_talk_sorted
 from seminars.talk import WebTalk
 from seminars.utils import pretty_timezone
+from seminars.app import get_subject
 from lmfdb.backend.searchtable import PostgresSearchTable
 from lmfdb.utils import flash_error
 from flask import flash
@@ -76,11 +77,12 @@ class PostgresUserTable(PostgresSearchTable):
             assert col in kwargs
         email = kwargs["email"] = validate_email(kwargs["email"])["email"]
         kwargs["password"] = self.bchash(kwargs["password"])
-        if "endorser" not in kwargs:
-            kwargs["endorser"] = None
-            kwargs["admin"] = kwargs["creator"] = False
-        for col in ["email_confirmed", "admin", "creator"]:
-            kwargs[col] = kwargs.get(col, False)
+        if "endorser_subject" not in kwargs:
+            kwargs["endorser_subject"] = []
+            kwargs["admin_subject"] = kwargs["endorsed_subject"] = []
+        kwargs["email_confirmed"] = kwargs.get("email_confirmed", False)
+        for col in ["admin_subject", "endorsed_subject"]:
+            kwargs[col] = kwargs.get(col, [])
         kwargs["talk_subscriptions"] = kwargs.get("talk_subscriptions", {})
         kwargs["seminar_subscriptions"] = kwargs.get("seminar_subscriptions", [])
         for col in ["name", "affiliation", "homepage", "timezone"]:
@@ -117,16 +119,21 @@ class PostgresUserTable(PostgresSearchTable):
             raise ValueError("User not present in database!")
         return bcpass == self.bchash(password, existing_hash=bcpass)
 
-    def make_creator(self, email, endorser):
+    def make_creator(self, subject, email, endorser):
+        # Should only be called if the user exists and the subject is not already in the endorsed subject list
+        edata = db.users.lookup(email, projection=["endorsed_subject", "endorser_subject"])
+        assert edata and subject not in edata["endorsed_subject"]
         with DelayCommit(self):
-            db.users.update({"email": ilike_query(email)}, {"creator": True, "endorser": endorser})
+            updated = {"endorsed_subject": edata["endorsed_subject"] + [subject],
+                       "endorser_subject": edata["endorser_subject"] + [endorser]}
+            db.users.update({"email": ilike_query(email)}, updated)
             # Update all of this user's created seminars and talks
-            db.seminars.update({"owner": ilike_query(email)}, {"display": True})
+            db.seminars.update({"owner": ilike_query(email), "subject": subject}, {"display": True})
             # Could do this with a join...
             from seminars.seminar import seminars_search
 
-            for sem in seminars_search({"owner": ilike_query(email)}, "shortname"):
-                db.talks.update({"seminar_id": sem}, {"display": True})
+            for sem in seminars_search({"owner": ilike_query(email), "subject": subject}, "shortname"):
+                db.talks.update({"seminar_id": sem, "subject": subject}, {"display": True})
 
     def save(self, data):
         data = dict(data)  # copy
@@ -204,30 +211,29 @@ class SeminarsUser(UserMixin):
             self._data.update(user_row)
             self._uid = str(self._data["id"])
             self._organizer = (
-                db.seminar_organizers.count({"email": ilike_query(self.email)}, record=False) > 0
+                db.seminar_organizers.count({"email": ilike_query(self.email), "subject": get_subject()}, record=False) > 0
             )
             self.try_to_endorse()
+        else:
+            self._organizer = False
 
     def try_to_endorse(self):
         if self.email_confirmed and not self.is_creator:
-            preendorsed = db.preendorsed_users.lucky({"email": ilike_query(self.email)})
+            subject = get_subject()
+            preendorsed = db.preendorsed_users.lucky({"email": ilike_query(self.email), "subject": subject})
             if preendorsed:
-                self.endorser = preendorsed["endorser"]  # must set endorser first
-                self.creator = True  # it already saves
-                db.preendorsed_users.delete({"email": ilike_query(self.email)})
+                userdb.make_creator(subject, self.email, preendorsed["endorser"])
+                db.preendorsed_users.delete({"email": ilike_query(self.email), "subject": subject})
                 return True
             # try to endorse if the user is the organizer of some seminar
             if self._organizer:
-                shortname = db.seminar_organizers.lucky(
-                    {"email": ilike_query(self.email)}, "seminar_id"
-                )
-                for owner in seminars_search({"shortname": shortname}, "owner"):
-                    owner = userdb.lookup(owner, ["creator", "id"])
-                    if owner and owner.get("creator"):
-                        self.endorser = owner["id"]  # must set endorser first
-                        self.creator = True  # it already saves
+                for shortname in db.seminar_organizers.search(
+                    {"email": ilike_query(self.email), "subject": get_subject()}, "seminar_id"
+                ):
+                    owner = SeminarsUser(email=seminars_lookup(shortname, "owner"))
+                    if owner.is_creator and owner.id is not None:
+                        userdb.make_creator(subject, self.email, int(owner.id))
                         return True
-
         return False
 
     @property
@@ -318,15 +324,6 @@ class SeminarsUser(UserMixin):
         return self._data.get("created")
 
     @property
-    def endorser(self):
-        return self._data.get("endorser")
-
-    @endorser.setter
-    def endorser(self, endorser):
-        self._data["endorser"] = endorser
-        self._dirty = True
-
-    @property
     def location(self):
         return self._data.get("location", "")
 
@@ -362,7 +359,7 @@ class SeminarsUser(UserMixin):
         ans = []
         for elt in self.seminar_subscriptions:
             try:
-                ans.append(WebSeminar(elt))
+                ans.append(WebSeminar(elt, any_subject=True))
             except ValueError:
                 self._data["seminar_subscriptions"].remove(elt)
                 self._dirty = True
@@ -399,7 +396,7 @@ class SeminarsUser(UserMixin):
         for shortname, ctrs in self.talk_subscriptions.items():
             for ctr in ctrs:
                 try:
-                    res.append(WebTalk(shortname, ctr))
+                    res.append(WebTalk(shortname, ctr, any_subject=True))
                 except ValueError:
                     self._data["talk_subscriptions"][shortname].remove(ctr)
                     self._dirty = True
@@ -460,24 +457,34 @@ class SeminarsUser(UserMixin):
 
     @property
     def is_admin(self):
-        return self._data.get("admin", False)
+        subject = get_subject()
+        allowed = self._data.get("admin_subject")
+        return allowed and subject in allowed
 
     @property
     def is_creator(self):
-        return self._data.get("creator", False)
+        subject = get_subject()
+        allowed = self._data.get("endorsed_subject")
+        return allowed and subject in allowed
 
     @property
     def creator(self):
-        return self._data.get("creator", False)
+        return self.is_creator
 
-    @creator.setter
-    def creator(self, creator):
-        self._data["creator"] = creator
-        self._dirty = True
-        if creator:
-            assert self.endorser is not None
-            userdb.make_creator(self.email, int(self.endorser))  # it already saves
-            flash("Someone endorsed you! You can now create seminars.", "success")
+    @property
+    def endorser(self):
+        if "endorser_subject" not in self._data:
+            self._data["endorser_subject"] = []
+        subject = get_subject()
+        elist = self._data["endorsed_subject"]
+        if elist:
+            try:
+                i = elist.index(subject)
+            except ValueError:
+                return None
+            else:
+                if i < len(self._data["endorser_subject"]):
+                    return self._data["endorser_subject"][i]
 
     @property
     def is_organizer(self):

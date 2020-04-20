@@ -1,4 +1,4 @@
-from seminars.app import app
+from seminars.app import app, get_subject
 from seminars import db
 from seminars.talk import talks_search, talks_lucky
 from seminars.utils import topics, toggle, Toggle, languages_dict
@@ -138,6 +138,7 @@ def talks_parser(info, query):
     query["hidden"] = {"$or": [False, {"$exists": False}]}
     # These are necessary but not succificient conditions to display the talk
     # Also need that the seminar has visibility 2.
+    query["subject"] = get_subject()
 
 
 def seminars_parser(info, query):
@@ -151,7 +152,7 @@ def seminars_parser(info, query):
     parse_substring(info, query, "name", ["name"])
     query["display"] = True
     query["visibility"] = 2
-
+    query["subject"] = get_subject()
 
 # Common boxes
 
@@ -359,15 +360,10 @@ class SemSearchArray(SearchArray):
 @app.route("/")
 def index():
     # Eventually want some kind of cutoff on which talks are included.
-    talks = list(
-        talks_search(
-            {"display": True,
+    query = {"display": True,
              "hidden": {"$or": [False, {"$exists": False}]},
-             "end_time": {"$gte": datetime.datetime.now()}},
-            sort=["start_time"],
-            seminar_dict=all_seminars(),
-        )
-    )
+             "end_time": {"$gte": datetime.datetime.now()}}
+    talks = list(talks_search(query, sort=["start_time"], seminar_dict=all_seminars()))
     # Filtering on display and hidden isn't sufficient since the seminar could be private
     talks = [talk for talk in talks if talk.searchable()]
     topic_counts = Counter()

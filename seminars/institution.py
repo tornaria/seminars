@@ -46,7 +46,7 @@ def clean_institutions(inp):
 
 def institution_known(institution):
     matcher = {"$like": "%{0}%".format(institution)}
-    return db.institutions.count({"$or": [{"shortname": matcher}, {"aliases": matcher}]}) > 0
+    return db.institutions.count({"$or": [{"shortname": matcher}, {"name": matcher}]}) > 0
 
 
 class WebInstitution(object):
