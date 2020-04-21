@@ -158,7 +158,12 @@ def allowed_shortname(shortname):
 def _all_topics():
     topics = defaultdict(list)
     for rec in db.topics.search():
-        topics[rec["subject"]].append((rec["abbreviation"], rec["name"]))
+        # We need to generalize this
+        subj = rec["subject"]
+        if subj == "math":
+            topics[rec["subject"]].append((rec["abbreviation"], rec["name"]))
+        else:
+            topics[rec["subject"]].append((rec["abbreviation"].replace(".", ""), rec["abbreviation"]))
     for subj in topics.values():
         subj.sort(key=lambda x: x[1].lower())
     return topics

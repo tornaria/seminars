@@ -58,6 +58,9 @@ function removeFromCookie(item, cookie) {
     return cur_items;
 }
 
+function getSubject() {
+    return $("#subjectcode").data("subject");
+}
 function topicFiltering() {
     return $('#enable_topic_filter').is(":checked");
 }
@@ -85,7 +88,7 @@ function setLanguageLinks() {
 }
 function setLinks() {
     setLanguageLinks();
-    var subject = $("#subjectcode").data("subject");
+    var subject = getSubject();
     console.log("subject", subject);
     var cur_topics = getCookie(subject + "_topics");
     // Port from the pre-subject world where everything was math
@@ -98,7 +101,7 @@ function setLinks() {
     }
     $(".talk").addClass("topic-filtered");
     if (cur_topics == null) {
-        setCookie("topics", "");
+        setCookie(subject + "_topics", "");
         setCookie("filter_topic", "0");
         // filter_language set in setLanguageLinks(), since we added it after launch
         setCookie("filter_calendar", "0");
@@ -148,11 +151,13 @@ function toggleLanguage(id) {
 function toggleTopic(id) {
     var toggler = $("#" + id);
     console.log(id);
+    var subject = getSubject();
     var topic = id.substring(10); // topiclink-*
     var talks = $(".topic-" + topic);
     if (toggler.hasClass("topicselected")) {
+        console.log("has class already");
         toggler.removeClass("topicselected");
-        cur_topics = removeFromCookie(topic, "topics").split(",");
+        cur_topics = removeFromCookie(topic, subject + "_topics").split(",");
         for (i=0; i<cur_topics.length; i++) {
             talks = talks.not(".topic-" + cur_topics[i]);
         }
@@ -162,8 +167,9 @@ function toggleTopic(id) {
             apply_striping();
         }
     } else {
+        console.log("adding class");
         toggler.addClass("topicselected");
-        addToCookie(topic, "topics");
+        addToCookie(topic, subject + "_topics");
         talks.removeClass("topic-filtered");
         if (topicFiltering()) {
             // elements may be filtered by other criteria
@@ -181,8 +187,10 @@ function getAllTopics() {
     return toggles;
 }
 function selectAllTopics() {
+    var subject = getSubject();
     var toggles = getAllTopics();
-    setCookie("topics", toggles.join(","));
+    console.log(toggles);
+    setCookie(subject + "_topics", toggles.join(","));
     $(".topic_toggle").addClass("topicselected");
     var talks = $(".talk");
     talks.removeClass("topic-filtered");
@@ -193,7 +201,8 @@ function selectAllTopics() {
     }
 }
 function clearAllTopics() {
-    setCookie("topics", "");
+    var subject = getSubject();
+    setCookie(subject + "_topics", "");
     var toggles = getAllTopics();
     $(".topic_toggle").removeClass("topicselected");
     var talks = $(".talk");
