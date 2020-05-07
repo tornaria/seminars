@@ -673,7 +673,7 @@ def toggle(tglid, value, checked=False, classes="", onchange="", name=""):
     return """
 <input
     type="checkbox"
-    class="{classes} tgl tgl-light"
+    class="{classes}tgl tgl-light"
     value="{value}"
     id="{tglid}"
     onchange="{onchange}"
@@ -685,7 +685,7 @@ def toggle(tglid, value, checked=False, classes="", onchange="", name=""):
         tglid=tglid,
         value=value,
         checked="checked" if checked else "",
-        classes=classes,
+        classes=" " + classes if classes else "",
         onchange=onchange,
         name=name,
     )
@@ -696,7 +696,7 @@ def toggle3way(tglid, value, classes="", onchange="", name=""):
         classes += " "
     return """
 <input
-    class="{classes} tgl tgl-light"
+    class="{classes}tgl tgl-light"
     value="{value}" id="{tglid}"
     onchange="{onchange}"
     name="{name}"
@@ -710,7 +710,7 @@ def toggle3way(tglid, value, classes="", onchange="", name=""):
 """.format(
         tglid=tglid,
         value=value,
-        classes=classes,
+        classes=" " + classes if classes else "",
         onchange=onchange,
         name=name,
     )

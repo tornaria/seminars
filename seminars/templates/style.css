@@ -2368,8 +2368,8 @@ max-width: 150px;
 .tgl-light + .tgl-btn:after {
   border-radius: 50%;
   background: #fff;
-  -webkit-transition: all .2s ease;
-  transition: all .2s ease;
+  -webkit-transition: all .3s ease;
+  transition: all .3s ease;
 }
 
 /* checkmark specific */
@@ -2418,7 +2418,6 @@ input[data-chosen='-1'] + .tgl-btn:after{
 
 input[data-chosen='0'] + .tgl-btn:after {
   left: 25%;
-  
 }
 
 input[data-chosen='1'] + .tgl-btn:after{

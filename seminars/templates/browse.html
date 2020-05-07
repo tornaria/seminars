@@ -33,9 +33,17 @@
   </tr>
 </table>
 
-<span>
-{{ toggle3way("foo", value="0", onchange="$(this).parent().notify('stop tickling me',  {className: 'info', position:'right'});") | safe }}
-</span>
+<div>
+  <table>
+    <tr><td>
+    3 way toggle:
+      </td>
+    <td>
+{{ toggle3way("foo", value="-1", onchange="$(this).parent().notify('stop tickling me',  {className: 'info', position:'right'});") | safe }}
+    </td>
+    </tr>
+  </table>
+</div>
 
 
 {% block browsing %}{% endblock %}
